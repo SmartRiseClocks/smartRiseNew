@@ -14,6 +14,44 @@ export type Database = {
   }
   public: {
     Tables: {
+      device_pairing_codes: {
+        Row: {
+          claimed_at: string | null
+          claimed_device_id: string | null
+          code: string
+          created_at: string
+          expires_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          claimed_at?: string | null
+          claimed_device_id?: string | null
+          code: string
+          created_at?: string
+          expires_at: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          claimed_at?: string | null
+          claimed_device_id?: string | null
+          code?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "device_pairing_codes_claimed_device_id_fkey"
+            columns: ["claimed_device_id"]
+            isOneToOne: false
+            referencedRelation: "devices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       devices: {
         Row: {
           device_id: string
@@ -77,6 +115,59 @@ export type Database = {
         }
         Relationships: []
       }
+      sensor_readings: {
+        Row: {
+          created_at: string
+          device_id: string
+          humidity_pct: number | null
+          id: string
+          light_lux: number | null
+          motion_detected: boolean | null
+          payload: Json
+          recorded_at: string
+          sound_level_db: number | null
+          source: string
+          temperature_c: number | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          device_id: string
+          humidity_pct?: number | null
+          id?: string
+          light_lux?: number | null
+          motion_detected?: boolean | null
+          payload?: Json
+          recorded_at?: string
+          sound_level_db?: number | null
+          source?: string
+          temperature_c?: number | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          device_id?: string
+          humidity_pct?: number | null
+          id?: string
+          light_lux?: number | null
+          motion_detected?: boolean | null
+          payload?: Json
+          recorded_at?: string
+          sound_level_db?: number | null
+          source?: string
+          temperature_c?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sensor_readings_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: false
+            referencedRelation: "devices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       wake_events: {
         Row: {
           alarm_start: string
@@ -117,7 +208,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      issue_device_pairing_code: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          code: string
+          expires_at: string
+          pairing_id: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
