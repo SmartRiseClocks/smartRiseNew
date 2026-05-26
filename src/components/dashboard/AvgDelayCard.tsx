@@ -1,46 +1,71 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Lightbulb } from "lucide-react";
+import { Activity } from "lucide-react";
+
+type LatestReading = {
+  humidity_pct: number | null;
+  light_lux: number | null;
+  motion_detected: boolean | null;
+  recorded_at: string;
+  temperature_c: number | null;
+};
 
 export function AvgDelayCard() {
-  const [seconds, setSeconds] = useState<number | null>(null);
-  const [isDummy, setIsDummy] = useState(true);
+  const [reading, setReading] = useState<LatestReading | null>(null);
 
   useEffect(() => {
-    const since = new Date(Date.now() - 7 * 86400_000).toISOString();
     supabase
-      .from("wake_events")
-      .select("alarm_start, light_on")
-      .gte("alarm_start", since)
-      .not("light_on", "is", null)
+      .from("sensor_readings")
+      .select("temperature_c, humidity_pct, light_lux, motion_detected, recorded_at")
+      .order("recorded_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
       .then(({ data, error }) => {
-        if (error || !data || data.length === 0) {
-          setSeconds(132); // dummy: 2m 12s
-          setIsDummy(true);
-          return;
-        }
-        const diffs = data.map((r) => (new Date(r.light_on!).getTime() - new Date(r.alarm_start).getTime()) / 1000);
-        const avg = diffs.reduce((a, b) => a + b, 0) / diffs.length;
-        setSeconds(Math.max(0, Math.round(avg)));
-        setIsDummy(false);
+        if (error || !data) return;
+        setReading(data);
       });
   }, []);
-
-  const m = seconds == null ? 0 : Math.floor(seconds / 60);
-  const s = seconds == null ? 0 : seconds % 60;
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2"><Lightbulb className="w-4 h-4" /> Ø Zeit bis Licht an</CardTitle>
-        <CardDescription>Wecker → Licht eingeschaltet (letzte 7 Tage)</CardDescription>
+        <CardTitle className="flex items-center gap-2">
+          <Activity className="w-4 h-4" />
+          Letzter Sensorscan
+        </CardTitle>
+        <CardDescription>Deine aktuellsten persoenlichen Messwerte im Ueberblick.</CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="text-5xl font-semibold tracking-tight">
-          {m}<span className="text-2xl text-muted-foreground">m</span> {String(s).padStart(2, "0")}<span className="text-2xl text-muted-foreground">s</span>
-        </div>
-        {isDummy && <p className="mt-3 text-xs text-muted-foreground">Beispielwert — echte Daten erscheinen sobald dein Gerät Events sendet.</p>}
+        {reading ? (
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-lg border border-border p-3">
+                <p className="text-xs text-muted-foreground">Temperatur</p>
+                <p className="text-2xl font-semibold">{reading.temperature_c != null ? `${reading.temperature_c} C` : "-"}</p>
+              </div>
+              <div className="rounded-lg border border-border p-3">
+                <p className="text-xs text-muted-foreground">Luftfeuchte</p>
+                <p className="text-2xl font-semibold">{reading.humidity_pct != null ? `${reading.humidity_pct} %` : "-"}</p>
+              </div>
+              <div className="rounded-lg border border-border p-3">
+                <p className="text-xs text-muted-foreground">Helligkeit</p>
+                <p className="text-2xl font-semibold">{reading.light_lux != null ? `${reading.light_lux} lux` : "-"}</p>
+              </div>
+              <div className="rounded-lg border border-border p-3">
+                <p className="text-xs text-muted-foreground">Bewegung</p>
+                <p className="text-2xl font-semibold">{reading.motion_detected == null ? "-" : reading.motion_detected ? "Ja" : "Nein"}</p>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Letzte Aktualisierung: {new Date(reading.recorded_at).toLocaleString("de-DE")}
+            </p>
+          </div>
+        ) : (
+          <div className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground">
+            Noch keine persoenlichen Sensorwerte vorhanden. Sobald dein Arduino Daten uebertraegt, wird hier dein letzter Sensorscan angezeigt.
+          </div>
+        )}
       </CardContent>
     </Card>
   );

@@ -1,12 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
-import { DeviceLink } from "@/components/dashboard/DeviceLink";
-import { DevicePairingCard } from "@/components/dashboard/DevicePairingCard";
+import { ArduinoSetupCard } from "@/components/dashboard/ArduinoSetupCard";
 import { WakeChart } from "@/components/dashboard/WakeChart";
 import { AvgDelayCard } from "@/components/dashboard/AvgDelayCard";
 import { FeedbackForm } from "@/components/dashboard/FeedbackForm";
-import { SensorReadingsCard } from "@/components/dashboard/SensorReadingsCard";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
@@ -46,13 +44,9 @@ function DashboardPage() {
           <AvgDelayCard />
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-2">
-          <DevicePairingCard />
-          <DeviceLink />
-        </div>
+        <ArduinoSetupCard />
 
-        <div className="grid gap-6 lg:grid-cols-2">
-          <SensorReadingsCard />
+        <div className="grid gap-6">
           <FeedbackForm />
         </div>
       </main>
