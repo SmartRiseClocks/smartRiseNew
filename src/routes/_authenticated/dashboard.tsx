@@ -3,14 +3,16 @@ import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { ArduinoSetupCard } from "@/components/dashboard/ArduinoSetupCard";
 import { WakeChart } from "@/components/dashboard/WakeChart";
-import { AvgDelayCard } from "@/components/dashboard/AvgDelayCard";
-import { FeedbackForm } from "@/components/dashboard/FeedbackForm";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
     meta: [
       { title: "Dashboard - SmartRise One" },
-      { name: "description", content: "Dein persoenliches SmartRise-Dashboard mit Weckzeit, Lichtlevel und Aufwachdauer." },
+      {
+        name: "description",
+        content:
+          "Dein persoenliches SmartRise-Dashboard mit Weckzeit, Lichtlevel und Aufwachdauer.",
+      },
     ],
   }),
   component: DashboardPage,
@@ -39,22 +41,13 @@ function DashboardPage() {
         <div>
           <h1 className="text-3xl font-semibold text-foreground">Dashboard</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Live-Uebersicht deiner SmartRise-Arduino-Werte fuer Weckzeit, Lichtlevel und Weckdauer.
+            Eure Live-Uebersicht fuer Geraetestatus, Lichtwert, Weckzeit und den letzten
+            Weckvorgang.
           </p>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-2">
-            <WakeChart />
-          </div>
-          <AvgDelayCard />
-        </div>
-
+        <WakeChart />
         <ArduinoSetupCard />
-
-        <div className="grid gap-6">
-          <FeedbackForm />
-        </div>
       </main>
     </div>
   );

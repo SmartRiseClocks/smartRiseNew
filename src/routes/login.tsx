@@ -11,8 +11,11 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/login")({
   head: () => ({
     meta: [
-      { title: "Anmelden — SmartRise One" },
-      { name: "description", content: "Melde dich bei deinem SmartRise-Konto an oder registriere dich." },
+      { title: "Anmelden - SmartRise One" },
+      {
+        name: "description",
+        content: "Melde dich bei deinem SmartRise-Konto an oder registriere dich.",
+      },
     ],
   }),
   component: LoginPage,
@@ -35,7 +38,10 @@ function LoginPage() {
   async function handleSignIn(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    const parsed = credSchema.safeParse({ email: fd.get("email"), password: fd.get("password") });
+    const parsed = credSchema.safeParse({
+      email: fd.get("email"),
+      password: fd.get("password"),
+    });
     if (!parsed.success) {
       toast.error(parsed.error.issues[0].message);
       return;
@@ -54,43 +60,60 @@ function LoginPage() {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     const displayName = String(fd.get("displayName") ?? "").trim().slice(0, 80);
-    const parsed = credSchema.safeParse({ email: fd.get("email"), password: fd.get("password") });
+    const parsed = credSchema.safeParse({
+      email: fd.get("email"),
+      password: fd.get("password"),
+    });
     if (!parsed.success) {
       toast.error(parsed.error.issues[0].message);
       return;
     }
     setBusy(true);
-    const { error } = await signUp(parsed.data.email, parsed.data.password, displayName || undefined);
+    const { error } = await signUp(
+      parsed.data.email,
+      parsed.data.password,
+      displayName || undefined,
+    );
     setBusy(false);
     if (error) toast.error(error);
     else {
-      toast.success("Konto erstellt — du bist eingeloggt.");
+      toast.success("Konto erstellt - du bist eingeloggt.");
       navigate({ to: "/dashboard" });
     }
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-background px-6 py-12">
+    <main className="flex min-h-screen items-center justify-center bg-background px-6 py-12">
       <div className="w-full max-w-md">
-        <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">← Zurück zur Startseite</Link>
+        <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">
+          ← Zurück zur Startseite
+        </Link>
         <h1 className="mt-6 text-3xl font-semibold text-foreground">SmartRise Konto</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Melde dich an oder registriere ein neues Konto.</p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Melde dich an oder registriere ein neues Konto.
+        </p>
 
         <Tabs defaultValue="signin" className="mt-8">
-          <TabsList className="grid grid-cols-2 w-full">
+          <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="signin">Anmelden</TabsTrigger>
             <TabsTrigger value="signup">Registrieren</TabsTrigger>
           </TabsList>
 
           <TabsContent value="signin">
-            <form onSubmit={handleSignIn} className="space-y-4 mt-6">
+            <form onSubmit={handleSignIn} className="mt-6 space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="si-email">E-Mail</Label>
                 <Input id="si-email" name="email" type="email" autoComplete="email" required />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="si-password">Passwort</Label>
-                <Input id="si-password" name="password" type="password" autoComplete="current-password" required />
+                <Input
+                  id="si-password"
+                  name="password"
+                  type="password"
+                  autoComplete="current-password"
+                  required
+                />
               </div>
               <Button type="submit" disabled={busy} className="w-full">
                 {busy ? "Wird angemeldet…" : "Anmelden"}
@@ -99,7 +122,7 @@ function LoginPage() {
           </TabsContent>
 
           <TabsContent value="signup">
-            <form onSubmit={handleSignUp} className="space-y-4 mt-6">
+            <form onSubmit={handleSignUp} className="mt-6 space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="su-name">Anzeigename (optional)</Label>
                 <Input id="su-name" name="displayName" type="text" maxLength={80} />
@@ -110,7 +133,14 @@ function LoginPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="su-password">Passwort (min. 8 Zeichen)</Label>
-                <Input id="su-password" name="password" type="password" autoComplete="new-password" required minLength={8} />
+                <Input
+                  id="su-password"
+                  name="password"
+                  type="password"
+                  autoComplete="new-password"
+                  required
+                  minLength={8}
+                />
               </div>
               <Button type="submit" disabled={busy} className="w-full">
                 {busy ? "Konto wird erstellt…" : "Konto erstellen"}
