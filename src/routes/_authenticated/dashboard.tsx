@@ -38,7 +38,9 @@ function DashboardPage() {
       <main className="mx-auto max-w-7xl space-y-8 px-6 py-10">
         <div>
           <h1 className="text-3xl font-semibold text-foreground">Dashboard</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Uebersicht deiner SmartRise-Weckdaten.</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Live-Uebersicht deiner SmartRise-Arduino-Werte fuer Weckzeit, Lichtlevel und Weckdauer.
+          </p>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-3">

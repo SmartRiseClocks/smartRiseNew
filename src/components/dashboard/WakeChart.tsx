@@ -107,22 +107,22 @@ export function WakeChart() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Deine Arduino-Werte</CardTitle>
+        <CardTitle>Arduino Live-Dashboard</CardTitle>
         <CardDescription>
-          Hier siehst du die eingestellte Weckzeit, das aktuelle Lichtlevel und die zuletzt gemessene Aufwachdauer.
+          Hier stehen genau die drei Werte aus deinem Arduino: Weckzeit, Lichtlevel und Dauer bis Licht den Wecker stoppt.
         </CardDescription>
       </CardHeader>
       <CardContent>
         {summary ? (
           <div className="grid gap-4 md:grid-cols-3">
             <div className="rounded-lg border border-border p-4">
-              <p className="text-xs text-muted-foreground">Aktuell eingestellte Weckzeit</p>
+              <p className="text-xs text-muted-foreground">1. Aktuell eingestellte Weckzeit</p>
               <p className="mt-2 text-2xl font-semibold">{summary.wakeTimeLabel ?? "--:-- Uhr"}</p>
               <p className="mt-2 text-sm text-muted-foreground">Direkt aus dem letzten Arduino-Upload.</p>
             </div>
 
             <div className="rounded-lg border border-border p-4">
-              <p className="text-xs text-muted-foreground">Aktuelles Lichtlevel</p>
+              <p className="text-xs text-muted-foreground">2. Aktuelles Lichtlevel</p>
               <p className="mt-2 text-2xl font-semibold">
                 {summary.currentLightLux != null ? `${summary.currentLightLux} lux` : "-"}
               </p>
@@ -134,7 +134,7 @@ export function WakeChart() {
             </div>
 
             <div className="rounded-lg border border-border p-4">
-              <p className="text-xs text-muted-foreground">Dauer bis Licht den Wecker stoppt</p>
+              <p className="text-xs text-muted-foreground">3. Dauer bis Licht den Wecker stoppt</p>
               <p className="mt-2 text-2xl font-semibold">{formatDuration(summary.wakeDurationMs)}</p>
               <p className="mt-2 text-sm text-muted-foreground">
                 {summary.wakeStartedAt
@@ -145,8 +145,8 @@ export function WakeChart() {
           </div>
         ) : (
           <div className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground">
-            Noch keine persoenlichen Sensordaten vorhanden. Sobald dein Arduino Daten sendet, erscheinen hier deine
-            Weckzeit, dein Lichtlevel und die Weckdauer.
+            Noch keine persoenlichen Sensordaten vorhanden. Sobald dein Arduino Daten sendet, erscheinen hier die drei
+            Arduino-Werte fuer Weckzeit, Lichtlevel und Weckdauer.
           </div>
         )}
       </CardContent>

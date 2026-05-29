@@ -47,9 +47,9 @@ export function AvgDelayCard() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Activity className="h-4 w-4" />
-          Lichtstatus jetzt
+          Arduino Lichtstatus
         </CardTitle>
-        <CardDescription>Der letzte vom Arduino gemeldete Helligkeitszustand.</CardDescription>
+        <CardDescription>Zusatzansicht zum aktuell gemeldeten Lichtwert deines Arduino.</CardDescription>
       </CardHeader>
       <CardContent>
         {reading ? (
