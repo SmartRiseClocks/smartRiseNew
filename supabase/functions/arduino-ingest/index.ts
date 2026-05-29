@@ -11,6 +11,8 @@ type ArduinoPayload = {
   payload?: Record<string, unknown>;
 };
 
+const LIGHT_THRESHOLD = 420;
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-device-secret",
@@ -151,6 +153,58 @@ Deno.serve(async (request) => {
 
   if (insertReadingError) {
     return json(500, { error: insertReadingError.message });
+  }
+
+  const alarmActive = payload.payload?.alarm_active === true;
+  const lightLux = payload.light_lux ?? null;
+
+  if (alarmActive) {
+    const { data: openWakeEvent, error: openWakeEventError } = await supabase
+      .from("wake_events")
+      .select("id, light_on")
+      .eq("device_id", deviceRecord.id)
+      .is("light_on", null)
+      .order("alarm_start", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (openWakeEventError) {
+      return json(500, { error: openWakeEventError.message });
+    }
+
+    let wakeEventId = openWakeEvent?.id ?? null;
+
+    if (!wakeEventId) {
+      const { data: createdWakeEvent, error: createWakeEventError } = await supabase
+        .from("wake_events")
+        .insert({
+          user_id: deviceRecord.user_id,
+          device_id: deviceRecord.id,
+          alarm_start: new Date().toISOString(),
+        })
+        .select("id")
+        .single();
+
+      if (createWakeEventError) {
+        return json(500, { error: createWakeEventError.message });
+      }
+
+      wakeEventId = createdWakeEvent.id;
+    }
+
+    if (wakeEventId && lightLux != null && lightLux > LIGHT_THRESHOLD) {
+      const { error: closeWakeEventError } = await supabase
+        .from("wake_events")
+        .update({
+          light_on: new Date().toISOString(),
+        })
+        .eq("id", wakeEventId)
+        .is("light_on", null);
+
+      if (closeWakeEventError) {
+        return json(500, { error: closeWakeEventError.message });
+      }
+    }
   }
 
   return json(200, {

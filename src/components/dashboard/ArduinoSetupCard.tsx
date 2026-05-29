@@ -19,12 +19,31 @@ type Device = {
   name: string | null;
 };
 
+type SupabaseLikeError = {
+  code?: string;
+  message?: string;
+};
+
+function createSixDigitCode() {
+  return String(Math.floor(Math.random() * 1_000_000)).padStart(6, "0");
+}
+
 function formatRemaining(expiresAt: string) {
   const ms = new Date(expiresAt).getTime() - Date.now();
   if (ms <= 0) return "abgelaufen";
   const minutes = Math.floor(ms / 60_000);
   const seconds = Math.floor((ms % 60_000) / 1000);
   return `${minutes}:${String(seconds).padStart(2, "0")} min`;
+}
+
+function getPairingSetupErrorMessage(error: SupabaseLikeError | null | undefined) {
+  if (!error) return null;
+
+  if (error.code === "PGRST202" || error.code === "PGRST205") {
+    return "Im verbundenen Supabase-Projekt fehlen noch die SmartRise-Migrationen fuer Pairing und Geraete. Bitte die Datenbank-Migrationen auf das produktive Projekt anwenden.";
+  }
+
+  return error.message ?? null;
 }
 
 export function ArduinoSetupCard() {
@@ -82,28 +101,91 @@ export function ArduinoSetupCard() {
     }
   }, [pairing, tick]);
 
+  async function createPairingCodeFallback() {
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      throw new Error("Du musst eingeloggt sein, um einen Kopplungscode zu erzeugen.");
+    }
+
+    const nowIso = new Date().toISOString();
+
+    const { error: deleteError } = await supabase
+      .from("device_pairing_codes")
+      .delete()
+      .is("claimed_at", null)
+      .gt("expires_at", nowIso)
+      .eq("user_id", user.id);
+
+    if (deleteError) {
+      throw new Error(deleteError.message);
+    }
+
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const code = createSixDigitCode();
+      const expiresAt = new Date(Date.now() + 10 * 60_000).toISOString();
+
+      const { data, error } = await supabase
+        .from("device_pairing_codes")
+        .insert({
+          user_id: user.id,
+          code,
+          expires_at: expiresAt,
+        })
+        .select("id, code, expires_at")
+        .single();
+
+      if (!error && data) {
+        return data;
+      }
+
+      if (error && error.code !== "23505") {
+        throw new Error(error.message);
+      }
+    }
+
+    throw new Error("Kopplungscode konnte nach mehreren Versuchen nicht erstellt werden.");
+  }
+
   async function handleGenerate() {
     setBusy(true);
-    const { data, error } = await supabase.rpc("issue_device_pairing_code");
-    setBusy(false);
+    try {
+      const { data, error } = await supabase.rpc("issue_device_pairing_code");
+      const setupErrorMessage = getPairingSetupErrorMessage(error);
 
-    if (error) {
-      toast.error(error.message);
-      return;
+      if (!error) {
+        const next = data?.[0];
+        if (!next) {
+          throw new Error("Kopplungscode konnte nicht erstellt werden.");
+        }
+
+        setPairing({
+          id: next.pairing_id,
+          code: next.code,
+          expires_at: next.expires_at,
+        });
+        toast.success("Neuer Kopplungscode erstellt.");
+        return;
+      }
+
+      try {
+        const fallbackResult = await createPairingCodeFallback();
+        setPairing(fallbackResult);
+        toast.success("Neuer Kopplungscode erstellt.");
+      } catch (fallbackError) {
+        const fallbackMessage =
+          fallbackError instanceof Error ? fallbackError.message : "Kopplungscode konnte nicht erstellt werden.";
+        throw new Error(setupErrorMessage ?? fallbackMessage);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Kopplungscode konnte nicht erstellt werden.";
+      toast.error(message);
+    } finally {
+      setBusy(false);
     }
-
-    const next = data?.[0];
-    if (!next) {
-      toast.error("Kopplungscode konnte nicht erstellt werden.");
-      return;
-    }
-
-    setPairing({
-      id: next.pairing_id,
-      code: next.code,
-      expires_at: next.expires_at,
-    });
-    toast.success("Neuer Kopplungscode erstellt.");
   }
 
   async function handleDeleteCode() {

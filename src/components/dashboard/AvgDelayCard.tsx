@@ -4,58 +4,62 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Activity } from "lucide-react";
 
 type LatestReading = {
-  humidity_pct: number | null;
   light_lux: number | null;
-  motion_detected: boolean | null;
   recorded_at: string;
-  temperature_c: number | null;
 };
+
+function getLightStatus(lightLux: number | null) {
+  if (lightLux == null) return "Noch keine Messung";
+  if (lightLux <= 420) return "Dunkel genug zum Klingeln";
+  if (lightLux <= 1500) return "Raum wird heller";
+  return "Helles Umgebungslicht";
+}
 
 export function AvgDelayCard() {
   const [reading, setReading] = useState<LatestReading | null>(null);
 
   useEffect(() => {
-    supabase
-      .from("sensor_readings")
-      .select("temperature_c, humidity_pct, light_lux, motion_detected, recorded_at")
-      .order("recorded_at", { ascending: false })
-      .limit(1)
-      .maybeSingle()
-      .then(({ data, error }) => {
-        if (error || !data) return;
-        setReading(data);
-      });
+    let active = true;
+
+    async function loadReading() {
+      const { data, error } = await supabase
+        .from("sensor_readings")
+        .select("light_lux, recorded_at")
+        .order("recorded_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!active || error || !data) return;
+      setReading(data);
+    }
+
+    loadReading();
+    const timer = window.setInterval(loadReading, 10_000);
+
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
   }, []);
 
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Activity className="w-4 h-4" />
-          Letzter Sensorscan
+          <Activity className="h-4 w-4" />
+          Lichtstatus jetzt
         </CardTitle>
-        <CardDescription>Deine aktuellsten persoenlichen Messwerte im Ueberblick.</CardDescription>
+        <CardDescription>Der letzte vom Arduino gemeldete Helligkeitszustand.</CardDescription>
       </CardHeader>
       <CardContent>
         {reading ? (
           <div className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-lg border border-border p-3">
-                <p className="text-xs text-muted-foreground">Temperatur</p>
-                <p className="text-2xl font-semibold">{reading.temperature_c != null ? `${reading.temperature_c} C` : "-"}</p>
-              </div>
-              <div className="rounded-lg border border-border p-3">
-                <p className="text-xs text-muted-foreground">Luftfeuchte</p>
-                <p className="text-2xl font-semibold">{reading.humidity_pct != null ? `${reading.humidity_pct} %` : "-"}</p>
-              </div>
-              <div className="rounded-lg border border-border p-3">
-                <p className="text-xs text-muted-foreground">Helligkeit</p>
-                <p className="text-2xl font-semibold">{reading.light_lux != null ? `${reading.light_lux} lux` : "-"}</p>
-              </div>
-              <div className="rounded-lg border border-border p-3">
-                <p className="text-xs text-muted-foreground">Bewegung</p>
-                <p className="text-2xl font-semibold">{reading.motion_detected == null ? "-" : reading.motion_detected ? "Ja" : "Nein"}</p>
-              </div>
+            <div className="rounded-lg border border-border p-4">
+              <p className="text-xs text-muted-foreground">Aktuelles Lichtlevel</p>
+              <p className="mt-2 text-3xl font-semibold">
+                {reading.light_lux != null ? `${reading.light_lux} lux` : "-"}
+              </p>
+              <p className="mt-2 text-sm text-muted-foreground">{getLightStatus(reading.light_lux)}</p>
             </div>
             <p className="text-xs text-muted-foreground">
               Letzte Aktualisierung: {new Date(reading.recorded_at).toLocaleString("de-DE")}
@@ -63,7 +67,8 @@ export function AvgDelayCard() {
           </div>
         ) : (
           <div className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground">
-            Noch keine persoenlichen Sensorwerte vorhanden. Sobald dein Arduino Daten uebertraegt, wird hier dein letzter Sensorscan angezeigt.
+            Noch keine persoenlichen Sensorwerte vorhanden. Sobald dein Arduino Daten uebertraegt, erscheint hier dein
+            aktueller Lichtstatus.
           </div>
         )}
       </CardContent>

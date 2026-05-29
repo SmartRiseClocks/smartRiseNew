@@ -62,7 +62,7 @@ BEGIN
   DELETE FROM public.device_pairing_codes
   WHERE user_id = auth.uid()
     AND claimed_at IS NULL
-    AND expires_at > now();
+    AND public.device_pairing_codes.expires_at > now();
 
   LOOP
     new_code := lpad(floor(random() * 1000000)::INT::TEXT, 6, '0');

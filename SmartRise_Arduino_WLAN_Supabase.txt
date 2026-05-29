@@ -1,0 +1,322 @@
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
+#include <HTTPClient.h>
+#include <Keypad.h>
+#include <Wire.h>
+#include <LCD_I2C.h>
+
+/*
+  SmartRise Arduino WLAN + Supabase
+  ---------------------------------
+  Dieses Beispiel ist fuer einen Arduino Nano ESP32 gedacht.
+  Wenn du einen klassischen Arduino Nano ohne WLAN nutzt, funktioniert
+  WiFi.h NICHT direkt. Dann brauchst du stattdessen:
+  1. einen Nano ESP32 oder
+  2. einen externen WLAN-Chip wie ESP8266 / ESP-01.
+
+  Vor dem Upload bitte diese Werte eintragen:
+  - WIFI_SSID
+  - WIFI_PASSWORD
+  - DEVICE_ID
+  - PAIRING_CODE
+  - ARDUINO_INGEST_SECRET
+
+  Die Funktion im Repo erwartet einen POST an:
+  https://yayzxkhdrlidtnafwhrm.supabase.co/functions/v1/arduino-ingest
+*/
+
+LCD_I2C lcd(0x27, 16, 2);
+
+// ---------- WLAN ----------
+const char* WIFI_SSID = "DEIN_WLAN_NAME";
+const char* WIFI_PASSWORD = "DEIN_WLAN_PASSWORT";
+
+// ---------- SmartRise / Supabase ----------
+const bool ENABLE_SUPABASE_UPLOAD = true;
+const char* DEVICE_ID = "SR-NANO-001";
+const char* PAIRING_CODE = "123456";
+const char* INGEST_URL = "https://yayzxkhdrlidtnafwhrm.supabase.co/functions/v1/arduino-ingest";
+const char* ARDUINO_INGEST_SECRET = "DEIN_INGEST_SECRET";
+
+// ---------- Keypad ----------
+const byte ROWS = 4;
+const byte COLS = 4;
+
+char keys[ROWS][COLS] = {
+  {'1', '2', '3', 'A'},
+  {'4', '5', '6', 'B'},
+  {'7', '8', '9', 'C'},
+  {'*', '0', '#', 'D'}
+};
+
+byte rowPins[ROWS] = {9, 8, 7, 6};
+byte colPins[COLS] = {5, 4, 3, 2};
+
+Keypad customKeypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
+
+// ---------- Status / Sensor ----------
+int sensorValue = 0;
+int screen = 0;
+int uhrzeith = 8;
+int uhrzeitm = 59;
+int stunde = 9;
+int minute = 0;
+int lastScreen = -1;
+
+unsigned long lastMinute = 0;
+unsigned long lastUpload = 0;
+unsigned long lastWifiCheck = 0;
+
+const unsigned long minuteInterval = 60000;
+const unsigned long uploadInterval = 10000;
+const unsigned long wifiCheckInterval = 5000;
+
+void scanI2CDevices() {
+  Serial.println("Starte I2C-Scan...");
+
+  byte foundDevices = 0;
+  for (byte address = 1; address < 127; address++) {
+    Wire.beginTransmission(address);
+    const byte error = Wire.endTransmission();
+
+    if (error == 0) {
+      Serial.print("I2C-Geraet gefunden bei 0x");
+      if (address < 16) Serial.print("0");
+      Serial.println(address, HEX);
+      foundDevices++;
+    }
+  }
+
+  if (foundDevices == 0) {
+    Serial.println("Kein I2C-Geraet gefunden. Bitte SDA/SCL, GND und VCC pruefen.");
+  }
+}
+
+void connectToWifi() {
+  Serial.print("Verbinde mit WLAN: ");
+  Serial.println(WIFI_SSID);
+
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+  unsigned long startAttempt = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - startAttempt < 20000) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println();
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("WLAN verbunden");
+    Serial.print("IP-Adresse: ");
+    Serial.println(WiFi.localIP());
+  } else {
+    Serial.println("WLAN Verbindung fehlgeschlagen");
+  }
+}
+
+void ensureWifiConnection() {
+  if (millis() - lastWifiCheck < wifiCheckInterval) return;
+  lastWifiCheck = millis();
+
+  if (WiFi.status() == WL_CONNECTED) return;
+
+  Serial.println("WLAN getrennt, neuer Verbindungsversuch...");
+  WiFi.disconnect();
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+}
+
+void sendSensorReading(bool alarmActive) {
+  if (!ENABLE_SUPABASE_UPLOAD) return;
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("Upload uebersprungen: kein WLAN");
+    return;
+  }
+
+  WiFiClientSecure client;
+  client.setInsecure();
+
+  HTTPClient http;
+  if (!http.begin(client, INGEST_URL)) {
+    Serial.println("HTTPS Verbindung zur Supabase Function fehlgeschlagen");
+    return;
+  }
+
+  http.addHeader("Content-Type", "application/json");
+  http.addHeader("x-device-secret", ARDUINO_INGEST_SECRET);
+
+  String json = "{";
+  json += "\"device_id\":\"" + String(DEVICE_ID) + "\",";
+  json += "\"pairing_code\":\"" + String(PAIRING_CODE) + "\",";
+  json += "\"temperature_c\":null,";
+  json += "\"humidity_pct\":null,";
+  json += "\"light_lux\":" + String(sensorValue) + ",";
+  json += "\"motion_detected\":false,";
+  json += "\"sound_level_db\":null,";
+  json += "\"payload\":{";
+  json += "\"alarm_hour\":" + String(stunde) + ",";
+  json += "\"alarm_minute\":" + String(minute) + ",";
+  json += "\"current_hour\":" + String(uhrzeith) + ",";
+  json += "\"current_minute\":" + String(uhrzeitm) + ",";
+  json += "\"alarm_active\":";
+  json += (alarmActive ? "true" : "false");
+  json += "}}";
+
+  int httpCode = http.POST(json);
+  Serial.print("Upload HTTP Code: ");
+  Serial.println(httpCode);
+
+  String response = http.getString();
+  if (response.length() > 0) {
+    Serial.println(response);
+  }
+
+  http.end();
+}
+
+void setup() {
+  // Beim Arduino Nano ESP32 liegt das Standard-I2C auf A4 (SDA) und A5 (SCL).
+  // D11/D12 sind SPI-Pins und fuehren beim LCD oft zu Zeichenmuell.
+  Wire.begin();
+  delay(250);
+  scanI2CDevices();
+
+  lcd.begin();
+  lcd.backlight();
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("SmartRise Start");
+  lcd.setCursor(0, 1);
+  lcd.print("LCD bereit");
+  delay(1200);
+  lcd.clear();
+
+  pinMode(10, OUTPUT);
+  pinMode(A0, INPUT);
+
+  Serial.begin(115200);
+  delay(1000);
+
+  connectToWifi();
+}
+
+void loop() {
+  unsigned long currentMillis = millis();
+  ensureWifiConnection();
+
+  if (currentMillis - lastMinute >= minuteInterval) {
+    lastMinute = currentMillis;
+    uhrzeitm++;
+
+    if (uhrzeitm >= 60) {
+      uhrzeitm = 0;
+      uhrzeith++;
+
+      if (uhrzeith >= 24) {
+        uhrzeith = 0;
+      }
+    }
+  }
+
+  char key = customKeypad.getKey();
+
+  if (key) {
+    Serial.print("Taste: ");
+    Serial.println(key);
+
+    switch (key) {
+      case '1':
+        screen = 1;
+        break;
+      case '2':
+        screen = 2;
+        break;
+      case '*':
+        screen = 0;
+        break;
+    }
+  }
+
+  if (screen != lastScreen) {
+    lcd.clear();
+    lastScreen = screen;
+  }
+
+  int currentTime = uhrzeith * 60 + uhrzeitm;
+  int alarmTime = stunde * 60 + minute;
+  bool alarmActive = false;
+
+  sensorValue = analogRead(A0);
+
+  if (screen == 0) {
+    lcd.setCursor(0, 0);
+    if (uhrzeith < 10) lcd.print("0");
+    lcd.print(uhrzeith);
+    lcd.print(":");
+    if (uhrzeitm < 10) lcd.print("0");
+    lcd.print(uhrzeitm);
+
+    lcd.setCursor(0, 1);
+    lcd.print("1=Menu 2=Wecker");
+    digitalWrite(10, LOW);
+  }
+
+  else if (screen == 1) {
+    lcd.setCursor(0, 0);
+    if (uhrzeith < 10) lcd.print("0");
+    lcd.print(uhrzeith);
+    lcd.print(":");
+    if (uhrzeitm < 10) lcd.print("0");
+    lcd.print(uhrzeitm);
+
+    lcd.setCursor(0, 1);
+    lcd.print("*=Back");
+
+    if (currentTime >= alarmTime && currentTime <= alarmTime + 5) {
+      if (sensorValue <= 420) {
+        digitalWrite(10, HIGH);
+        alarmActive = true;
+      } else {
+        digitalWrite(10, LOW);
+      }
+    } else {
+      digitalWrite(10, LOW);
+    }
+  }
+
+  else if (screen == 2) {
+    lcd.setCursor(0, 0);
+    if (stunde < 10) lcd.print("0");
+    lcd.print(stunde);
+    lcd.print(":");
+    if (minute < 10) lcd.print("0");
+    lcd.print(minute);
+
+    lcd.setCursor(0, 1);
+    lcd.print("4=H+ 5=M+ *=Back");
+
+    if (key) {
+      switch (key) {
+        case '4':
+          stunde++;
+          if (stunde >= 24) stunde = 0;
+          lcd.clear();
+          break;
+        case '5':
+          minute++;
+          if (minute >= 60) minute = 0;
+          lcd.clear();
+          break;
+      }
+    }
+
+    digitalWrite(10, LOW);
+  }
+
+  if (currentMillis - lastUpload >= uploadInterval) {
+    lastUpload = currentMillis;
+    sendSensorReading(alarmActive);
+  }
+
+  delay(100);
+}

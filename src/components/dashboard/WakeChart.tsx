@@ -1,84 +1,152 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import type { Json } from "@/integrations/supabase/types";
 
-type Row = { day: string; value: number };
+type LatestSensorReading = {
+  light_lux: number | null;
+  payload: Json;
+  recorded_at: string;
+};
 
-const DAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
+type WakeEventRow = {
+  alarm_start: string;
+  light_on: string | null;
+};
 
-function startOfWeek(): Date {
-  const d = new Date();
-  const day = (d.getDay() + 6) % 7;
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() - day);
-  return d;
+type WakeSummary = {
+  currentLightLux: number | null;
+  lastUpdatedAt: string | null;
+  wakeDurationMs: number | null;
+  wakeStartedAt: string | null;
+  wakeTimeLabel: string | null;
+};
+
+function isObject(value: Json): value is Record<string, Json | undefined> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function getPayloadNumber(payload: Json, key: string) {
+  if (!isObject(payload)) return null;
+  const value = payload[key];
+  return typeof value === "number" ? value : null;
+}
+
+function formatWakeTime(hour: number | null, minute: number | null) {
+  if (hour == null || minute == null) return null;
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")} Uhr`;
+}
+
+function formatDuration(ms: number | null) {
+  if (ms == null) return "Noch kein abgeschlossener Weckvorgang";
+  const totalSeconds = Math.max(0, Math.round(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes} Min ${String(seconds).padStart(2, "0")} Sek`;
+}
+
+function buildWakeSummary(
+  latestReading: LatestSensorReading | null,
+  latestWakeEvent: WakeEventRow | null,
+): WakeSummary {
+  const wakeHour = latestReading ? getPayloadNumber(latestReading.payload, "alarm_hour") : null;
+  const wakeMinute = latestReading ? getPayloadNumber(latestReading.payload, "alarm_minute") : null;
+
+  let wakeDurationMs: number | null = null;
+  if (latestWakeEvent?.light_on) {
+    wakeDurationMs =
+      new Date(latestWakeEvent.light_on).getTime() - new Date(latestWakeEvent.alarm_start).getTime();
+  }
+
+  return {
+    currentLightLux: latestReading?.light_lux ?? null,
+    lastUpdatedAt: latestReading?.recorded_at ?? null,
+    wakeDurationMs,
+    wakeStartedAt: latestWakeEvent?.alarm_start ?? null,
+    wakeTimeLabel: formatWakeTime(wakeHour, wakeMinute),
+  };
 }
 
 export function WakeChart() {
-  const [data, setData] = useState<Row[]>([]);
-  const [hasData, setHasData] = useState(false);
+  const [summary, setSummary] = useState<WakeSummary | null>(null);
 
   useEffect(() => {
-    const since = startOfWeek().toISOString();
-    supabase
-      .from("sensor_readings")
-      .select("recorded_at, temperature_c")
-      .gte("recorded_at", since)
-      .not("temperature_c", "is", null)
-      .order("recorded_at", { ascending: true })
-      .then(({ data: rows, error }) => {
-        if (error || !rows || rows.length === 0) {
-          setHasData(false);
-          return;
-        }
+    let active = true;
 
-        const buckets: Record<number, { sum: number; count: number }> = {};
-        rows.forEach((row) => {
-          const ref = new Date(row.recorded_at);
-          const dow = (ref.getDay() + 6) % 7;
-          buckets[dow] = buckets[dow] || { sum: 0, count: 0 };
-          buckets[dow].sum += Number(row.temperature_c ?? 0);
-          buckets[dow].count += 1;
-        });
+    async function loadSummary() {
+      const [{ data: latestReading, error: latestReadingError }, { data: latestWakeEvent, error: latestWakeEventError }] =
+        await Promise.all([
+          supabase
+            .from("sensor_readings")
+            .select("light_lux, payload, recorded_at")
+            .order("recorded_at", { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+          supabase
+            .from("wake_events")
+            .select("alarm_start, light_on")
+            .not("light_on", "is", null)
+            .order("alarm_start", { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+        ]);
 
-        const nextData = DAYS.map((day, index) => {
-          const bucket = buckets[index];
-          const value = bucket ? Math.round((bucket.sum / bucket.count) * 10) / 10 : 0;
-          return { day, value };
-        });
+      if (!active || latestReadingError || latestWakeEventError) return;
+      setSummary(buildWakeSummary(latestReading ?? null, latestWakeEvent ?? null));
+    }
 
-        setData(nextData);
-        setHasData(true);
-      });
+    loadSummary();
+    const timer = window.setInterval(loadSummary, 10_000);
+
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
   }, []);
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Deine Temperaturwerte dieser Woche</CardTitle>
+        <CardTitle>Deine Arduino-Werte</CardTitle>
         <CardDescription>
-          {hasData
-            ? "Durchschnittliche Temperatur pro Wochentag aus deinen persoenlichen Sensorwerten."
-            : "Hier erscheinen deine persoenlichen Temperaturwerte, sobald dein Arduino Daten sendet."}
+          Hier siehst du die eingestellte Weckzeit, das aktuelle Lichtlevel und die zuletzt gemessene Aufwachdauer.
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {hasData ? (
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                <XAxis dataKey="day" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} tickFormatter={(value) => `${value} C`} />
-                <Tooltip formatter={(value: number) => [`${value.toFixed(1)} C`, "Temperatur"]} />
-                <Bar dataKey="value" fill="var(--primary)" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+        {summary ? (
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="rounded-lg border border-border p-4">
+              <p className="text-xs text-muted-foreground">Aktuell eingestellte Weckzeit</p>
+              <p className="mt-2 text-2xl font-semibold">{summary.wakeTimeLabel ?? "--:-- Uhr"}</p>
+              <p className="mt-2 text-sm text-muted-foreground">Direkt aus dem letzten Arduino-Upload.</p>
+            </div>
+
+            <div className="rounded-lg border border-border p-4">
+              <p className="text-xs text-muted-foreground">Aktuelles Lichtlevel</p>
+              <p className="mt-2 text-2xl font-semibold">
+                {summary.currentLightLux != null ? `${summary.currentLightLux} lux` : "-"}
+              </p>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {summary.lastUpdatedAt
+                  ? `Letztes Update: ${new Date(summary.lastUpdatedAt).toLocaleString("de-DE")}`
+                  : "Noch keine Sensordaten vorhanden."}
+              </p>
+            </div>
+
+            <div className="rounded-lg border border-border p-4">
+              <p className="text-xs text-muted-foreground">Dauer bis Licht den Wecker stoppt</p>
+              <p className="mt-2 text-2xl font-semibold">{formatDuration(summary.wakeDurationMs)}</p>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {summary.wakeStartedAt
+                  ? `Letzter Weckerstart: ${new Date(summary.wakeStartedAt).toLocaleString("de-DE")}`
+                  : "Noch kein abgeschlossener Weckvorgang gespeichert."}
+              </p>
+            </div>
           </div>
         ) : (
           <div className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground">
-            Noch keine persoenlichen Temperaturwerte vorhanden. Nach der Arduino-Kopplung werden hier automatisch deine echten Sensorwerte angezeigt.
+            Noch keine persoenlichen Sensordaten vorhanden. Sobald dein Arduino Daten sendet, erscheinen hier deine
+            Weckzeit, dein Lichtlevel und die Weckdauer.
           </div>
         )}
       </CardContent>
