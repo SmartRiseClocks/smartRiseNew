@@ -117,45 +117,36 @@ export type Database = {
       }
       sensor_readings: {
         Row: {
+          alarm_active: boolean | null
+          alarm_hour: number | null
+          alarm_minute: number | null
           created_at: string
           device_id: string
-          humidity_pct: number | null
           id: string
           light_lux: number | null
-          motion_detected: boolean | null
-          payload: Json
           recorded_at: string
-          sound_level_db: number | null
-          source: string
-          temperature_c: number | null
           user_id: string
         }
         Insert: {
+          alarm_active?: boolean | null
+          alarm_hour?: number | null
+          alarm_minute?: number | null
           created_at?: string
           device_id: string
-          humidity_pct?: number | null
           id?: string
           light_lux?: number | null
-          motion_detected?: boolean | null
-          payload?: Json
           recorded_at?: string
-          sound_level_db?: number | null
-          source?: string
-          temperature_c?: number | null
           user_id: string
         }
         Update: {
+          alarm_active?: boolean | null
+          alarm_hour?: number | null
+          alarm_minute?: number | null
           created_at?: string
           device_id?: string
-          humidity_pct?: number | null
           id?: string
           light_lux?: number | null
-          motion_detected?: boolean | null
-          payload?: Json
           recorded_at?: string
-          sound_level_db?: number | null
-          source?: string
-          temperature_c?: number | null
           user_id?: string
         }
         Relationships: [

@@ -3,12 +3,10 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 type ArduinoPayload = {
   device_id?: string;
   pairing_code?: string;
-  temperature_c?: number | null;
-  humidity_pct?: number | null;
   light_lux?: number | null;
-  motion_detected?: boolean | null;
-  sound_level_db?: number | null;
-  payload?: Record<string, unknown>;
+  alarm_hour?: number | null;
+  alarm_minute?: number | null;
+  alarm_active?: boolean | null;
 };
 
 const LIGHT_THRESHOLD = 420;
@@ -142,20 +140,17 @@ Deno.serve(async (request) => {
   const { error: insertReadingError } = await supabase.from("sensor_readings").insert({
     user_id: deviceRecord.user_id,
     device_id: deviceRecord.id,
-    source: "arduino",
-    temperature_c: payload.temperature_c ?? null,
-    humidity_pct: payload.humidity_pct ?? null,
     light_lux: payload.light_lux ?? null,
-    motion_detected: payload.motion_detected ?? null,
-    sound_level_db: payload.sound_level_db ?? null,
-    payload: payload.payload ?? {},
+    alarm_hour: payload.alarm_hour ?? null,
+    alarm_minute: payload.alarm_minute ?? null,
+    alarm_active: payload.alarm_active ?? null,
   });
 
   if (insertReadingError) {
     return json(500, { error: insertReadingError.message });
   }
 
-  const alarmActive = payload.payload?.alarm_active === true;
+  const alarmActive = payload.alarm_active === true;
   const lightLux = payload.light_lux ?? null;
 
   if (alarmActive) {

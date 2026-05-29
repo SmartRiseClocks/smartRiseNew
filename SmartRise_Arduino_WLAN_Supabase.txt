@@ -148,19 +148,12 @@ void sendSensorReading(bool alarmActive) {
   String json = "{";
   json += "\"device_id\":\"" + String(DEVICE_ID) + "\",";
   json += "\"pairing_code\":\"" + String(PAIRING_CODE) + "\",";
-  json += "\"temperature_c\":null,";
-  json += "\"humidity_pct\":null,";
   json += "\"light_lux\":" + String(sensorValue) + ",";
-  json += "\"motion_detected\":false,";
-  json += "\"sound_level_db\":null,";
-  json += "\"payload\":{";
   json += "\"alarm_hour\":" + String(stunde) + ",";
   json += "\"alarm_minute\":" + String(minute) + ",";
-  json += "\"current_hour\":" + String(uhrzeith) + ",";
-  json += "\"current_minute\":" + String(uhrzeitm) + ",";
   json += "\"alarm_active\":";
   json += (alarmActive ? "true" : "false");
-  json += "}}";
+  json += "}";
 
   int httpCode = http.POST(json);
   Serial.print("Upload HTTP Code: ");
