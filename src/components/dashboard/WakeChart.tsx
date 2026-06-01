@@ -17,12 +17,19 @@ type DeviceRow = {
   name: string | null;
 };
 
+type LatestWakeEvent = {
+  alarm_start: string;
+  light_on: string | null;
+};
+
 type DashboardSummary = {
   alarmActive: boolean;
   currentDeviceLabel: string | null;
   currentLightLux: number | null;
   deviceOnline: boolean;
   lastUpdatedAt: string | null;
+  latestWakeDelayLabel: string | null;
+  latestWakeEndedAt: string | null;
   wakeTimeLabel: string | null;
 };
 
@@ -36,6 +43,20 @@ function formatLastSeen(timestamp: string | null) {
   return new Date(timestamp).toLocaleString("de-DE");
 }
 
+function formatDelayLabel(alarmStart: string | null, lightOn: string | null) {
+  if (!alarmStart || !lightOn) return null;
+
+  const diffMs = new Date(lightOn).getTime() - new Date(alarmStart).getTime();
+  if (Number.isNaN(diffMs) || diffMs < 0) return null;
+
+  const totalSeconds = Math.round(diffMs / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  if (minutes === 0) return `${seconds} Sek.`;
+  return `${minutes} Min. ${String(seconds).padStart(2, "0")} Sek.`;
+}
+
 function getLightStatus(lightLux: number | null) {
   if (lightLux == null) return "Warte auf den ersten Messwert";
   if (lightLux <= 420) return "Dunkel genug zum Klingeln";
@@ -46,6 +67,7 @@ function getLightStatus(lightLux: number | null) {
 function buildSummary(
   latestDevice: DeviceRow | null,
   latestReading: LatestSensorReading | null,
+  latestWakeEvent: LatestWakeEvent | null,
 ): DashboardSummary {
   const lastUpdatedAt = latestReading?.recorded_at ?? null;
   const deviceOnline =
@@ -57,7 +79,15 @@ function buildSummary(
     currentLightLux: latestReading?.light_lux ?? null,
     deviceOnline,
     lastUpdatedAt,
-    wakeTimeLabel: formatWakeTime(latestReading?.alarm_hour ?? null, latestReading?.alarm_minute ?? null),
+    latestWakeDelayLabel: formatDelayLabel(
+      latestWakeEvent?.alarm_start ?? null,
+      latestWakeEvent?.light_on ?? null,
+    ),
+    latestWakeEndedAt: latestWakeEvent?.light_on ?? null,
+    wakeTimeLabel: formatWakeTime(
+      latestReading?.alarm_hour ?? null,
+      latestReading?.alarm_minute ?? null,
+    ),
   };
 }
 
@@ -68,24 +98,34 @@ export function WakeChart() {
     let active = true;
 
     async function loadSummary() {
-      const [{ data: latestDevice, error: latestDeviceError }, { data: latestReading, error: latestReadingError }] =
-        await Promise.all([
-          supabase
-            .from("devices")
-            .select("device_id, linked_at, name")
-            .order("linked_at", { ascending: false })
-            .limit(1)
-            .maybeSingle(),
-          supabase
-            .from("sensor_readings")
-            .select("light_lux, alarm_hour, alarm_minute, alarm_active, recorded_at")
-            .order("recorded_at", { ascending: false })
-            .limit(1)
-            .maybeSingle(),
-        ]);
+      const [
+        { data: latestDevice, error: latestDeviceError },
+        { data: latestReading, error: latestReadingError },
+        { data: latestWakeEvent, error: latestWakeEventError },
+      ] = await Promise.all([
+        supabase
+          .from("devices")
+          .select("device_id, linked_at, name")
+          .order("linked_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from("sensor_readings")
+          .select("light_lux, alarm_hour, alarm_minute, alarm_active, recorded_at")
+          .order("recorded_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from("wake_events")
+          .select("alarm_start, light_on")
+          .not("light_on", "is", null)
+          .order("alarm_start", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ]);
 
-      if (!active || latestDeviceError || latestReadingError) return;
-      setSummary(buildSummary(latestDevice ?? null, latestReading ?? null));
+      if (!active || latestDeviceError || latestReadingError || latestWakeEventError) return;
+      setSummary(buildSummary(latestDevice ?? null, latestReading ?? null, latestWakeEvent ?? null));
     }
 
     loadSummary();
@@ -99,6 +139,11 @@ export function WakeChart() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "devices" },
+        () => void loadSummary(),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "wake_events" },
         () => void loadSummary(),
       )
       .subscribe();
@@ -129,7 +174,7 @@ export function WakeChart() {
       </CardHeader>
       <CardContent>
         {summary ? (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
             <div className="rounded-lg border border-border p-4">
               <p className="text-xs text-muted-foreground">Verknüpftes Gerät</p>
               <p className="mt-2 text-2xl font-semibold">{summary.currentDeviceLabel ?? "Noch keines"}</p>
@@ -160,7 +205,18 @@ export function WakeChart() {
               </p>
             </div>
 
-            <div className="rounded-lg border border-border p-4 md:col-span-2 xl:col-span-4">
+            <div className="rounded-lg border border-border p-4">
+              <p className="text-xs text-muted-foreground">Zeit bis Licht an</p>
+              <p className="mt-2 text-2xl font-semibold">
+                {summary.latestWakeDelayLabel ?? "Noch kein Wert"}
+              </p>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Letzter abgeschlossener Weckvorgang
+                {summary.latestWakeEndedAt ? ` am ${formatLastSeen(summary.latestWakeEndedAt)}` : "."}
+              </p>
+            </div>
+
+            <div className="rounded-lg border border-border p-4 md:col-span-2 xl:col-span-5">
               <p className="text-xs text-muted-foreground">Letzte Synchronisation</p>
               <p className="mt-2 text-xl font-semibold">{formatLastSeen(summary.lastUpdatedAt)}</p>
               <p className="mt-2 text-sm text-muted-foreground">
