@@ -124,7 +124,7 @@ export function WakeChart() {
           .maybeSingle(),
       ]);
 
-      if (!active || latestDeviceError || latestReadingError || latestWakeEventError) return;
+      if (!active || latestDeviceError || latestReadingError) return;
       setSummary(buildSummary(latestDevice ?? null, latestReading ?? null, latestWakeEvent ?? null));
     }
 
