@@ -153,23 +153,22 @@ Deno.serve(async (request) => {
   const alarmActive = payload.alarm_active === true;
   const lightLux = payload.light_lux ?? null;
 
-  if (alarmActive) {
-    const { data: openWakeEvent, error: openWakeEventError } = await supabase
-      .from("wake_events")
-      .select("id, light_on")
-      .eq("device_id", deviceRecord.id)
-      .is("light_on", null)
-      .order("alarm_start", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+  const { data: openWakeEvent, error: openWakeEventError } = await supabase
+    .from("wake_events")
+    .select("id, light_on")
+    .eq("device_id", deviceRecord.id)
+    .is("light_on", null)
+    .order("alarm_start", { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
-    if (openWakeEventError) {
-      return json(500, { error: openWakeEventError.message });
-    }
+  if (openWakeEventError) {
+    return json(500, { error: openWakeEventError.message });
+  }
 
-    let wakeEventId = openWakeEvent?.id ?? null;
+  let wakeEventId = openWakeEvent?.id ?? null;
 
-    if (!wakeEventId) {
+  if (alarmActive && !wakeEventId) {
       const { data: createdWakeEvent, error: createWakeEventError } = await supabase
         .from("wake_events")
         .insert({
@@ -184,21 +183,20 @@ Deno.serve(async (request) => {
         return json(500, { error: createWakeEventError.message });
       }
 
-      wakeEventId = createdWakeEvent.id;
-    }
+    wakeEventId = createdWakeEvent.id;
+  }
 
-    if (wakeEventId && lightLux != null && lightLux > LIGHT_THRESHOLD) {
-      const { error: closeWakeEventError } = await supabase
-        .from("wake_events")
-        .update({
-          light_on: new Date().toISOString(),
-        })
-        .eq("id", wakeEventId)
-        .is("light_on", null);
+  if (wakeEventId && lightLux != null && lightLux > LIGHT_THRESHOLD) {
+    const { error: closeWakeEventError } = await supabase
+      .from("wake_events")
+      .update({
+        light_on: new Date().toISOString(),
+      })
+      .eq("id", wakeEventId)
+      .is("light_on", null);
 
-      if (closeWakeEventError) {
-        return json(500, { error: closeWakeEventError.message });
-      }
+    if (closeWakeEventError) {
+      return json(500, { error: closeWakeEventError.message });
     }
   }
 
